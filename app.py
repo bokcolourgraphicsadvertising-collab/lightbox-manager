@@ -4,6 +4,7 @@ import json
 import math
 import re
 from datetime import datetime
+from io import BytesIO
 from PIL import Image, ImageDraw, ImageFont
 
 # Set page configuration for Chrome
@@ -15,7 +16,6 @@ st.set_page_config(
 
 CONFIG_FILE = "lightbox_config.json"
 
-# Load default data structures
 DEFAULT_ALUMINUM_FRAMES = {
     "frame_6cm_white": {"label": "Aluminum Frame 6cm Side Profile 6mtrs length (White)", "price": 2600.00, "cuttable": True},
     "frame_6cm_silver": {"label": "Aluminum Frame 6cm Side Profile 6mtrs length (Silver)", "price": 2600.00, "cuttable": True},
@@ -37,6 +37,18 @@ DEFAULT_POWER_SUPPLIES = {
     "ps_12v_240w": {"label": "Slim Indoor Power Supply 12V 240W", "price": 876.00},
     "ps_12v_300w": {"label": "Slim Indoor Power Supply 12V 300W", "price": 900.00},
     "ps_12v_400w": {"label": "Slim Indoor Power Supply 12V 400W", "price": 937.00},
+}
+
+DEFAULT_BOARDS = {
+    "board_hard_mdf": {"label": "Reflective Board for Lightbox Backing 122*244cm x 5mm Hard MDF", "price": 912.00},
+    "board_soft_mdf": {"label": "Reflective Board for Lightbox Backing 122*244cm x 5mm Soft MDF", "price": 600.00},
+}
+
+DEFAULT_LEDS = {
+    "led_12v_nw_cw": {"label": "LED Hard Strip Fish Eye 12V Non-Waterproof Cool White (12W/1m 12LEDs)", "price": 78.00},
+    "led_12v_nw_ww": {"label": "LED Hard Strip Fish Eye 12V Non-Waterproof Warm White (12W/1m 12LEDs)", "price": 78.00},
+    "led_12v_w_cw": {"label": "LED Hard Strip Fish Eye 12V Waterproof Cool White (12W/1m 12LEDs)", "price": 114.00},
+    "led_12v_w_ww": {"label": "LED Hard Strip Fish Eye 12V Waterproof Warm White (12W/1m 12LEDs)", "price": 114.00},
 }
 
 DEFAULT_UV_STF = {
@@ -61,6 +73,8 @@ def load_config():
         "receipts": {},
         "aluminum_frames": DEFAULT_ALUMINUM_FRAMES,
         "power_supplies": DEFAULT_POWER_SUPPLIES,
+        "boards": DEFAULT_BOARDS,
+        "leds": DEFAULT_LEDS,
         "uv_stf": DEFAULT_UV_STF,
         "polycloth": DEFAULT_POLYCLOTH,
         "frame_length_cm": 604.0,
@@ -73,42 +87,42 @@ def save_config(config):
 
 config = load_config()
 
-# --- Streamlit UI App Layout ---
-st.title("💡 Signmart Mediatech — Lightbox & Quotation Manager")
-st.sidebar.header("Navigation & Settings")
-
-app_mode = st.sidebar.selectbox("Choose Mode", ["Create Quotation / POS", "View Saved Documents"])
+st.title("💡 Signmart Mediatech — Full Lightbox & Quotation Manager")
+st.sidebar.header("Navigation & Mode")
+app_mode = st.sidebar.selectbox("Select Action", ["Create Quotation / POS", "View Saved Documents"])
 
 if "cart" not in st.session_state:
     st.session_state.cart = []
 
 if app_mode == "Create Quotation / POS":
-    st.subheader("📝 New Client & Project Setup")
+    st.subheader("📝 Client & Order Details")
     
     col1, col2 = st.columns(2)
     with col1:
-        customer_name = st.text_input("Customer / Client Name")
+        customer_name = st.text_input("Customer Name", value="Walk-In Client")
         company_name = st.text_input("Company Name", value="N/A")
-        contact_number = st.text_input("Contact Number")
+        contact_number = st.text_input("Contact Number", value="")
     with col2:
         tin = st.text_input("TIN", value="N/A")
-        address = st.text_input("Address")
+        address = st.text_input("Address", value="")
         prepared_by = st.text_input("Prepared By", value="Vaughn Jordan")
 
     st.markdown("---")
-    st.subheader("🛒 Add Items to Order")
+    st.subheader("🛒 Add Items")
     
-    item_type = st.selectbox("Select Item Category", [
+    item_type = st.selectbox("Item Category", [
         "Fabric Cloth Lightbox", 
         "Aluminum Profile Frame", 
         "UV Print / Backlit Film", 
         "Polycloth Material",
+        "LED Bars Calculator",
+        "Boards (MDF)",
         "Rush Fee / Installation"
     ])
 
     if item_type == "Fabric Cloth Lightbox":
         frame_size = st.selectbox("Frame Size Profile", ["6cm", "8cm", "10cm"])
-        unit_mode = st.selectbox("Unit", ["CM", "MM", "IN", "FT"])
+        unit_mode = st.selectbox("Unit Mode", ["CM", "MM", "IN", "FT"])
         
         c1, c2, c3 = st.columns(3)
         with c1: width = st.number_input("Width", min_value=1.0, value=100.0)
@@ -140,14 +154,14 @@ if app_mode == "Create Quotation / POS":
                 "images": []
             }
             st.session_state.cart.append(item)
-            st.success("Added Lightbox to Cart successfully!")
+            st.success("Lightbox added successfully!")
 
     elif item_type == "UV Print / Backlit Film":
         uv_db = config.get("uv_stf", DEFAULT_UV_STF)
-        uv_choice = st.selectbox("Select Material Option", list(uv_db.keys()), format_func=lambda x: uv_db[x]["label"])
+        uv_choice = st.selectbox("Material Option", list(uv_db.keys()), format_func=lambda x: uv_db[x]["label"])
         selected_uv = uv_db[uv_choice]
 
-        unit_mode = st.selectbox("Unit", ["CM", "MM", "IN", "FT"])
+        unit_mode = st.selectbox("Unit Mode", ["CM", "MM", "IN", "FT"])
         c1, c2, c3 = st.columns(3)
         with c1: width = st.number_input("Width", min_value=1.0, value=100.0)
         with c2: height = st.number_input("Height", min_value=1.0, value=100.0)
@@ -160,7 +174,7 @@ if app_mode == "Create Quotation / POS":
 
         rate = st.number_input("Price per Sq. Ft.", value=selected_uv["price_per_sqft"])
         
-        if st.button("Add Print Material to Cart"):
+        if st.button("Add Print Material"):
             total_price = sq_ft * rate * qty
             item = {
                 "type": "uv_stf",
@@ -175,11 +189,11 @@ if app_mode == "Create Quotation / POS":
                 "images": []
             }
             st.session_state.cart.append(item)
-            st.success(f"Added {selected_uv['label']} to Cart!")
+            st.success(f"Added {selected_uv['label']} to cart!")
 
-    # --- Cart Review Section ---
+    # --- Cart Review ---
     st.markdown("---")
-    st.subheader("📋 Current Cart Summary")
+    st.subheader("📋 Cart Summary")
     if st.session_state.cart:
         subtotal = 0
         for i, cart_item in enumerate(st.session_state.cart):
@@ -192,42 +206,35 @@ if app_mode == "Create Quotation / POS":
             st.session_state.cart = []
             st.rerun()
 
-        if st.button("💾 Save Quotation"):
+        if st.button("💾 Save & Generate Quotation"):
             doc_id = "QT-" + datetime.now().strftime("%Y%m%d-%H%M")
             doc_data = {
                 "date": datetime.now().strftime("%B %d, %Y"),
-                "customer": customer_name if customer_name else "Walk-In Client",
+                "customer": customer_name,
                 "company_name": company_name,
                 "address": address,
                 "tin": tin,
                 "contact_number": contact_number,
                 "items": st.session_state.cart,
                 "subtotal": subtotal,
-                "discount_percent": 0.0,
-                "discount_amount": 0.0,
                 "grand_total": subtotal,
-                "down_payment": 0.0,
-                "balance": subtotal,
                 "si_number": doc_id
             }
             config["quotations"][doc_id] = doc_data
             save_config(config)
-            st.success(f"Quotation successfully generated and saved with ID: {doc_id}!")
+            st.success(f"Saved successfully as Quotation ID: {doc_id}!")
     else:
-        st.info("Your cart is currently empty.")
+        st.info("Your cart is empty.")
 
 elif app_mode == "View Saved Documents":
-    st.subheader("📂 Saved Quotations & Receipts")
-    saved_quotes = config.get("quotations", {})
-    if saved_quotes:
-        selected_doc = st.selectbox("Select Document ID", list(saved_quotes.keys()))
-        doc = saved_quotes[selected_doc]
-        st.write(f"**Client:** {doc['customer']} ({doc.get('company_name', 'N/A')})")
-        st.write(f"**Date:** {doc['date']}")
-        st.write(f"**Grand Total:** P{doc['grand_total']:,.2f}")
-        
-        st.markdown("#### Items:")
+    st.subheader("📂 Saved Quotations")
+    saved = config.get("quotations", {})
+    if saved:
+        doc_key = st.selectbox("Select Quotation", list(saved.keys()))
+        doc = saved[doc_key]
+        st.write(f"**Client:** {doc['customer']} ({doc['company_name']})")
+        st.write(f"**Total:** P{doc['grand_total']:,.2f}")
         for item in doc["items"]:
-            st.text(f"- {item.get('type')} | Total: P{item['total_price']:,.2f}")
+            st.text(f"- {item.get('type')} | P{item['total_price']:,.2f}")
     else:
         st.info("No saved documents found.")
